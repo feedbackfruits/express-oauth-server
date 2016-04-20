@@ -6,6 +6,7 @@
 var InvalidArgumentError = require('oauth2-server/lib/errors/invalid-argument-error');
 var NodeOAuthServer = require('oauth2-server');
 var Promise = require('bluebird');
+var Cookie = require('cookie');
 var Request = require('oauth2-server').Request;
 var Response = require('oauth2-server').Response;
 var UnauthorizedRequestError = require('oauth2-server/lib/errors/unauthorized-request-error');
@@ -15,13 +16,13 @@ var UnauthorizedRequestError = require('oauth2-server/lib/errors/unauthorized-re
  */
 
 function ExpressOAuthServer(options) {
-  options = options || {};
+  this.options = options || {};
 
   if (!options.model) {
     throw new InvalidArgumentError('Missing parameter: `model`');
   }
 
-  this.server = new NodeOAuthServer(options);
+  this.server = new NodeOAuthServer(this.options);
 }
 
 /**
@@ -95,6 +96,7 @@ ExpressOAuthServer.prototype.authorize = function() {
 
 ExpressOAuthServer.prototype.token = function() {
   var server = this.server;
+  var cookieOptions = this.options.cookieOptions || {};
 
   return function(req, res, next) {
     var request = new Request(req);
@@ -106,6 +108,15 @@ ExpressOAuthServer.prototype.token = function() {
       })
       .tap(function(token) {
         res.locals.oauth = { token: token };
+      })
+      .tap(function(token) {
+        var options = Object.assign({
+          secure: true,
+          httpOnly: true,
+          expires: token.accessTokenExpiresAt
+        }, cookieOptions);
+
+        res.set('Set-Cookie', Cookie.serialize('access_token', token.accessToken, options));
       })
       .then(function() {
         return handleResponse(req, res, response);
